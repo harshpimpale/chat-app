@@ -43,4 +43,25 @@ router.post('/subscribe', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Unsubscribe from push notifications
+router.post('/unsubscribe', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    
+    // Remove subscription from user
+    await User.findByIdAndUpdate(req.userId, {
+      $unset: { pushSubscription: '' }
+    });
+    
+    console.log(`User ${req.userId} unsubscribed from push notifications`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Unsubscribe error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
 export default router;

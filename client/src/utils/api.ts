@@ -23,13 +23,14 @@ api.interceptors.response.use(
 );
 
 export interface User {
-  _id?: string;  // Add MongoDB _id
-  id?: string;   // Keep id for compatibility
+  _id?: string;
+  id?: string;
   username: string;
   email: string;
   isOnline: boolean;
-  lastSeen?: Date;
+  lastSeen?: Date | string; // Can be Date or string from API
 }
+
 
 export interface Message {
   _id: string;
@@ -103,8 +104,12 @@ export const notificationAPI = {
     api.get<{ publicKey: string }>('/notifications/vapid-public-key'),
   
   subscribe: (subscription: PushSubscription) =>
-    api.post('/notifications/subscribe', { subscription })
+    api.post('/notifications/subscribe', { subscription }),
+  
+  unsubscribe: () =>
+    api.post('/notifications/unsubscribe')
 };
+
 
 
 export default api;
