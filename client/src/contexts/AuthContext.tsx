@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authAPI, User } from '../utils/api';
+import { authAPI, User, setAuthToken, getAuthToken, removeAuthToken } from '../utils/api';
 import { subscribeToPushNotifications } from '../utils/pushNotifications';
 
 interface AuthContextType {
@@ -31,7 +31,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const checkAuth = async () => {
     try {
-      console.log('🔍 Checking authentication...');
+      const token = getAuthToken();
+      
+      if (!token) {
+        console.log('❌ No token found in localStorage');
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      console.log('🔍 Checking authentication with token...');
       const { data } = await authAPI.getCurrentUser();
       console.log('✅ User authenticated (raw):', data.user);
       
@@ -41,8 +50,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log('✅ User _ID:', normalizedUser._id);
       
       setUser(normalizedUser);
-    } catch (error) {
-      console.log('❌ Not authenticated');
+    } catch (error: any) {
+      console.log('❌ Auth check failed:', error.response?.status);
+      if (error.response?.status === 401) {
+        removeAuthToken();
+      }
       setUser(null);
     } finally {
       setLoading(false);
@@ -53,18 +65,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       console.log('🔐 AuthContext: Logging in user:', email);
       const { data } = await authAPI.login({ email, password });
-      console.log('✅ AuthContext: Login API response (raw):', data);
+      console.log('✅ AuthContext: Login API response:', data);
+      console.log('🔑 Token in response:', data.token ? 'Yes' : 'NO - MISSING!');
       
-      // Normalize user object to ensure both id and _id exist
+      // Save token from response
+      if (data.token) {
+        setAuthToken(data.token);
+        console.log('✅ Token saved to localStorage');
+        
+        // Verify it was saved
+        const savedToken = getAuthToken();
+        console.log('✅ Token verification:', savedToken ? 'Saved successfully' : 'FAILED TO SAVE');
+      } else {
+        console.error('❌❌❌ NO TOKEN IN RESPONSE!');
+        throw new Error('No authentication token received from server');
+      }
+      
       const normalizedUser = normalizeUser(data.user);
-      console.log('✅ AuthContext: Normalized user:', normalizedUser);
-      console.log('✅ AuthContext: User ID:', normalizedUser.id);
-      
       setUser(normalizedUser);
+      console.log('✅ User set in state:', normalizedUser);
       
-      // Subscribe to push notifications after login (non-blocking)
       try {
-        console.log('🔔 Subscribing to push notifications...');
         await subscribeToPushNotifications();
         console.log('✅ Push notifications subscribed');
       } catch (pushError) {
@@ -81,6 +102,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log('📝 AuthContext: Registering user:', email);
       const { data } = await authAPI.register({ username, email, password });
       console.log('✅ AuthContext: Registration successful (raw):', data);
+      console.log('🔑 Token in response:', data.token ? 'Yes' : 'NO - MISSING!');
+      
+      // Save token from response
+      if (data.token) {
+        setAuthToken(data.token);
+        console.log('✅ Token saved to localStorage');
+      } else {
+        console.error('❌❌❌ NO TOKEN IN RESPONSE!');
+        throw new Error('No authentication token received from server');
+      }
       
       // Normalize user object
       const normalizedUser = normalizeUser(data.user);
@@ -103,12 +134,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = async () => {
     try {
       console.log('👋 Logging out...');
-      await authAPI.logout();
+      await authAPI.logout(); // This removes token from localStorage
       setUser(null);
       console.log('✅ Logged out');
     } catch (error) {
       console.error('❌ Logout error:', error);
-      // Still clear user even if API call fails
+      // Still clear user and token even if API call fails
+      removeAuthToken();
       setUser(null);
     }
   };

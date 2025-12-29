@@ -1,51 +1,39 @@
 import axios from 'axios';
 
-// Store token in localStorage
+// Token management
 export const setAuthToken = (token: string) => {
   localStorage.setItem('authToken', token);
+  console.log('✅ Token saved to localStorage');
 };
 
-export const getAuthToken = () => {
-  return localStorage.getItem('authToken');
+export const getAuthToken = (): string | null => {
+  const token = localStorage.getItem('authToken');
+  console.log('🔑 Getting token from localStorage:', token ? 'Found' : 'Not found');
+  return token;
 };
 
 export const removeAuthToken = () => {
   localStorage.removeItem('authToken');
+  console.log('🗑️ Token removed from localStorage');
 };
 
 const api = axios.create({
-  baseURL: (import.meta as any).env.VITE_API_URL + '/api' || 'http://localhost:5000/api',
-  withCredentials: true
+  baseURL: ((import.meta as any).env?.VITE_API_URL || 'http://localhost:5000') + '/api',
+  withCredentials: false  // Change to false for cross-domain
 });
 
-// Add token to all requests
+// Add token to every request
 api.interceptors.request.use((config) => {
   const token = getAuthToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+    console.log('🌐 API Request with token:', config.method?.toUpperCase(), config.url);
+  } else {
+    console.log('🌐 API Request without token:', config.method?.toUpperCase(), config.url);
   }
-  console.log('🌐 API Request:', config.method?.toUpperCase(), config.url);
   return config;
 });
 
-api.interceptors.response.use(
-  (response) => {
-    // Save token from login/register responses
-    if (response.data.token) {
-      setAuthToken(response.data.token);
-    }
-    console.log('✅ API Response:', response.status, response.config.url);
-    return response;
-  },
-  (error) => {
-    console.error('❌ API Error:', error.response?.status, error.config?.url, error.response?.data);
-    // if (error.response?.status === 401) {
-    //   removeAuthToken();
-    //   window.location.href = '/login';
-    // }
-    return Promise.reject(error);
-  }
-);
 api.interceptors.response.use(
   (response) => {
     console.log('✅ API Response:', response.status, response.config.url);
@@ -63,9 +51,8 @@ export interface User {
   username: string;
   email: string;
   isOnline: boolean;
-  lastSeen?: Date | string; // Can be Date or string from API
+  lastSeen?: Date | string;
 }
-
 
 export interface Message {
   _id: string;
@@ -79,7 +66,7 @@ export interface Message {
 const normalizeUser = (user: any): User => {
   return {
     ...user,
-    id: user.id || user._id,  // Ensure id property exists
+    id: user.id || user._id,
     _id: user._id || user.id
   };
 };
@@ -91,8 +78,10 @@ export const authAPI = {
   login: (data: { email: string; password: string }) =>
     api.post('/auth/login', data),
   
-  logout: () =>
-    api.post('/auth/logout'),
+  logout: () => {
+    removeAuthToken();
+    return api.post('/auth/logout');
+  },
   
   getCurrentUser: () =>
     api.get('/auth/me')
@@ -101,7 +90,6 @@ export const authAPI = {
 export const messageAPI = {
   getUsers: async () => {
     const response = await api.get<{ users: User[] }>('/messages/users');
-    // Normalize all users
     return {
       ...response,
       data: {
@@ -113,26 +101,12 @@ export const messageAPI = {
   getConversation: (recipientId: string) =>
     api.get<{ messages: Message[] }>(`/messages/conversation/${recipientId}`),
   
-  sendMessage: (data: { recipientId: string; content: string }) => {
-    console.log('📮 messageAPI.sendMessage called with:', data);
-    
-    if (!data.recipientId) {
-      console.error('❌ recipientId is missing!');
-      throw new Error('recipientId is required');
-    }
-    
-    if (!data.content) {
-      console.error('❌ content is missing!');
-      throw new Error('content is required');
-    }
-    
-    return api.post<{ message: Message }>('/messages/send', data);
-  },
+  sendMessage: (data: { recipientId: string; content: string }) =>
+    api.post<{ message: Message }>('/messages/send', data),
   
   getUnreadCount: () =>
     api.get<{ count: number }>('/messages/unread-count')
 };
-
 
 export const notificationAPI = {
   getVapidPublicKey: () =>
@@ -144,7 +118,5 @@ export const notificationAPI = {
   unsubscribe: () =>
     api.post('/notifications/unsubscribe')
 };
-
-
 
 export default api;

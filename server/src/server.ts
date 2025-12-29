@@ -50,46 +50,35 @@ io.on('connection', (socket) => {
   console.log('👤 User connected:', socket.id);
   console.log('📋 Listing all registered socket events...');
   
-  // Log all events being listened to
   socket.onAny((eventName, ...args) => {
     console.log(`📡 Received event: "${eventName}"`, args.length > 0 ? `with ${args.length} args` : '');
   });
   
-  // Authenticate socket connection
   socket.on('authenticate', async (token: string) => {
     try {
       console.log('🔐 Socket authentication attempt');
       console.log('  - Socket ID:', socket.id);
-      console.log('  - Token from client:', token ? 'Provided' : 'Empty (will check cookies)');
       
       let authToken = token;
       
-      // If no token provided or empty, read from cookie
+      // Also check socket.handshake.auth for token
+      if ((!authToken || authToken === '') && socket.handshake.auth?.token) {
+        authToken = socket.handshake.auth.token;
+        console.log('  - Token from handshake.auth');
+      }
+      
       if (!authToken || authToken === '') {
         console.log('  - Reading from cookies...');
         const cookieHeader = socket.handshake.headers.cookie;
-        console.log('  - Raw cookie header:', cookieHeader);
         
         if (cookieHeader) {
-          // Parse cookies
           const cookies = cookieHeader.split(';').reduce((acc: any, cookie) => {
             const [key, value] = cookie.trim().split('=');
             acc[key] = value;
             return acc;
           }, {});
           
-          console.log('  - Parsed cookies:', Object.keys(cookies));
-          
           authToken = cookies.token;
-          
-          if (authToken) {
-            console.log('✅ Token found in cookie!');
-          } else {
-            console.error('❌ No token cookie found');
-            console.error('   Available cookies:', Object.keys(cookies));
-          }
-        } else {
-          console.error('❌ No cookie header in handshake');
         }
       }
       
@@ -116,7 +105,6 @@ io.on('connection', (socket) => {
       socket.emit('auth-error', { error: 'Authentication failed' });
     }
   });
-
   
   // Send message
   socket.on('send-message', async (data: { recipientId: string; content: string }) => {

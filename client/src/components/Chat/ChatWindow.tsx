@@ -1,19 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { messageAPI, User, Message } from '../../utils/api';
+import { messageAPI, User, Message, getAuthToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import UserList from './UserList';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import Navbar from '../Layout/Navbar';
-
-// Helper function to get cookie value
-// function getCookie(name: string): string | null {
-//   const value = `; ${document.cookie}`;
-//   const parts = value.split(`; ${name}=`);
-//   if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
-//   return null;
-// }
 
 const ChatWindow: React.FC = () => {
   const { user, loading } = useAuth();
@@ -25,6 +17,7 @@ const ChatWindow: React.FC = () => {
   const [unreadCounts, setUnreadCounts] = useState<{ [userId: string]: number }>({});
   const [socketConnected, setSocketConnected] = useState(false);
 
+  // Show loading screen while auth is being checked
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-100">
@@ -36,7 +29,7 @@ const ChatWindow: React.FC = () => {
     );
   }
 
-    // Show message if user not authenticated
+  // Show message if user not authenticated
   if (!user) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-100">
@@ -53,68 +46,96 @@ const ChatWindow: React.FC = () => {
     );
   }
 
-// Initialize socket connection
-useEffect(() => {
-  if (!user) {
-    console.log('⏳ Waiting for user authentication...');
-    return;
-  }
+  // Initialize socket connection
+  useEffect(() => {
+    if (!user) {
+      console.log('⏳ Waiting for user authentication...');
+      return;
+    }
 
-  console.log('🔌 Initializing socket...');
-  console.log('👤 User authenticated:', user.id);
-  console.log('🍪 Cookie is httpOnly and will be sent automatically by browser');
-
-  const newSocket = io( (import.meta as any).env.VITE_API_URL || 'http://localhost:5000', {
-    withCredentials: true, // This tells browser to include httpOnly cookies!
-    transports: ['websocket', 'polling']
-  });
-
-  newSocket.onAny((eventName, ...args) => {
-    console.log(`📡 Event: "${eventName}"`, args);
-  });
-
-  newSocket.on('connect', () => {
-    console.log('✅ Socket CONNECTED:', newSocket.id);
-    setSocketConnected(true);
+    console.log('🔌 Initializing socket...');
+    console.log('👤 User authenticated:', user.id);
     
-    // Emit authenticate WITHOUT token - server will read from cookie
-    console.log('📤 Emitting authenticate (cookie sent in handshake)');
-    newSocket.emit('authenticate', ''); // Empty string - server reads cookie
-  });
+    const token = getAuthToken();
+    console.log('🔑 Token available:', token ? 'Yes' : 'No');
 
-  newSocket.on('authenticated', (data: { success: boolean; userId: string }) => {
-    console.log('✅✅✅ AUTHENTICATED:', data);
-  });
+    if (!token) {
+      console.error('❌ No token available for socket connection');
+      alert('Authentication token missing. Please login again.');
+      window.location.href = '/login';
+      return;
+    }
 
-  newSocket.on('auth-error', (data: { error: string }) => {
-    console.error('❌ AUTH-ERROR:', data);
-  });
+    const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000';
+    console.log('🌐 Connecting to:', apiUrl);
 
-  newSocket.on('message-sent', (data: { success: boolean }) => {
-    console.log('✅ MESSAGE-SENT:', data);
-  });
+    const newSocket = io(apiUrl, {
+      withCredentials: false,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      auth: {
+        token: token
+      }
+    });
 
-  newSocket.on('message-error', (data: { error: string }) => {
-    console.error('❌ MESSAGE-ERROR:', data);
-  });
+    newSocket.onAny((eventName, ...args) => {
+      console.log(`📡 Event: "${eventName}"`, args);
+    });
 
-  newSocket.on('disconnect', (reason) => {
-    console.log('❌ DISCONNECTED:', reason);
-    setSocketConnected(false);
-  });
+    newSocket.on('connect', () => {
+      console.log('✅ Socket CONNECTED:', newSocket.id);
+      setSocketConnected(true);
+      
+      // Emit authenticate with token
+      console.log('📤 Emitting authenticate');
+      newSocket.emit('authenticate', token);
+    });
 
-  newSocket.on('connect_error', (error) => {
-    console.error('❌ CONNECTION ERROR:', error);
-  });
+    newSocket.on('authenticated', (data: { success: boolean; userId: string }) => {
+      console.log('✅✅✅ AUTHENTICATED:', data);
+    });
 
-  setSocket(newSocket);
+    newSocket.on('auth-error', (data: { error: string }) => {
+      console.error('❌ AUTH-ERROR:', data);
+      alert(`Socket authentication failed: ${data.error}`);
+    });
 
-  return () => {
-    console.log('🔌 Cleaning up socket');
-    newSocket.close();
-  };
-}, [user]);
+    newSocket.on('message-sent', (data: { success: boolean }) => {
+      console.log('✅ MESSAGE-SENT:', data);
+    });
 
+    newSocket.on('message-error', (data: { error: string }) => {
+      console.error('❌ MESSAGE-ERROR:', data);
+    });
+
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ Socket DISCONNECTED:', reason);
+      setSocketConnected(false);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ CONNECTION ERROR:', error);
+      setSocketConnected(false);
+    });
+
+    newSocket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('🔄 Reconnection attempt:', attemptNumber);
+    });
+
+    newSocket.on('reconnect', (attemptNumber) => {
+      console.log('✅ Reconnected after', attemptNumber, 'attempts');
+      setSocketConnected(true);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      console.log('🔌 Cleaning up socket');
+      newSocket.close();
+    };
+  }, [user]);
 
   // Socket event listeners
   useEffect(() => {
@@ -198,8 +219,12 @@ useEffect(() => {
       const { data } = await messageAPI.getUsers();
       console.log('✅ Loaded users:', data.users.length);
       setUsers(data.users);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error loading users:', error);
+      if (error.response?.status === 401) {
+        alert('Session expired. Please login again.');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -214,8 +239,12 @@ useEffect(() => {
       const { data } = await messageAPI.getConversation(recipientId);
       console.log('✅ Loaded messages:', data.messages.length);
       setMessages(data.messages);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error loading conversation:', error);
+      if (error.response?.status === 401) {
+        alert('Session expired. Please login again.');
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -240,9 +269,11 @@ useEffect(() => {
       return;
     }
 
-    if (!socketConnected) {
-      console.error('❌ Socket not connected');
-      alert('Not connected to server. Please check your connection.');
+    // Check if socket is actually connected
+    if (!socket.connected) {
+      console.error('❌ Socket not connected. State:', socket.connected);
+      alert('Not connected to server. Attempting to reconnect...');
+      socket.connect();
       return;
     }
 
@@ -295,38 +326,27 @@ useEffect(() => {
 
   const handleTyping = () => {
     const recipientId = selectedUser?.id || (selectedUser as any)?._id;
-    if (recipientId && socket && socketConnected) {
+    if (recipientId && socket && socket.connected) {
       socket.emit('typing', recipientId);
     }
   };
 
   const handleStopTyping = () => {
     const recipientId = selectedUser?.id || (selectedUser as any)?._id;
-    if (recipientId && socket && socketConnected) {
+    if (recipientId && socket && socket.connected) {
       socket.emit('stop-typing', recipientId);
     }
   };
-
-  // Show loading if user not authenticated yet
-  if (!user) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       <Navbar />
       
-      {!socketConnected && (
-        <div className="bg-yellow-100 border-b border-yellow-400 px-4 py-2 text-center">
-          <span className="text-yellow-800 text-sm">
-            ⚠️ Connecting to server...
+      {/* Connection Status */}
+      {!socketConnected && user && (
+        <div className="bg-red-100 border-b border-red-400 px-4 py-2 text-center">
+          <span className="text-red-800 text-sm">
+            ⚠️ Disconnected from server. Trying to reconnect...
           </span>
         </div>
       )}
@@ -365,7 +385,7 @@ useEffect(() => {
 
           <MessageList
             messages={messages}
-            currentUserId={user?.id || (user as any)?._id || ''}
+            currentUserId={user?.id || user?._id || ''}
             selectedUser={selectedUser}
             isTyping={isTyping}
           />
