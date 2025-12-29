@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { messageAPI, User, Message, getAuthToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { Menu, X, Wifi, WifiOff } from 'lucide-react';
 import UserList from './UserList';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
@@ -16,28 +17,36 @@ const ChatWindow: React.FC = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<{ [userId: string]: number }>({});
   const [socketConnected, setSocketConnected] = useState(false);
+  const [showUserList, setShowUserList] = useState(false); // Mobile sidebar toggle
 
-  // Show loading screen while auth is being checked
+  // Loading screen
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading authentication...</p>
+          <div className="relative w-16 h-16 mx-auto mb-4">
+            <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-200 rounded-full"></div>
+            <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+          </div>
+          <p className="text-gray-700 font-medium">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // Show message if user not authenticated
+  // Not authenticated
   if (!user) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">Please log in to access chat</p>
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl">🔒</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Authentication Required</h2>
+          <p className="text-gray-600 mb-6">Please log in to access your messages</p>
           <button
             onClick={() => window.location.href = '/login'}
-            className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600"
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all font-medium shadow-lg"
           >
             Go to Login
           </button>
@@ -46,106 +55,44 @@ const ChatWindow: React.FC = () => {
     );
   }
 
-  // Initialize socket connection
+  // Socket initialization (same as before)
   useEffect(() => {
-    if (!user) {
-      console.log('⏳ Waiting for user authentication...');
-      return;
-    }
+    if (!user) return;
 
-    console.log('🔌 Initializing socket...');
-    console.log('👤 User authenticated:', user.id);
-    
     const token = getAuthToken();
-    console.log('🔑 Token available:', token ? 'Yes' : 'No');
-
     if (!token) {
-      console.error('❌ No token available for socket connection');
-      alert('Authentication token missing. Please login again.');
       window.location.href = '/login';
       return;
     }
 
     const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000';
-    console.log('🌐 Connecting to:', apiUrl);
-
     const newSocket = io(apiUrl, {
       withCredentials: false,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      auth: {
-        token: token
-      }
-    });
-
-    newSocket.onAny((eventName, ...args) => {
-      console.log(`📡 Event: "${eventName}"`, args);
+      auth: { token }
     });
 
     newSocket.on('connect', () => {
-      console.log('✅ Socket CONNECTED:', newSocket.id);
       setSocketConnected(true);
-      
-      // Emit authenticate with token
-      console.log('📤 Emitting authenticate');
       newSocket.emit('authenticate', token);
     });
 
-    newSocket.on('authenticated', (data: { success: boolean; userId: string }) => {
-      console.log('✅✅✅ AUTHENTICATED:', data);
-    });
-
-    newSocket.on('auth-error', (data: { error: string }) => {
-      console.error('❌ AUTH-ERROR:', data);
-      alert(`Socket authentication failed: ${data.error}`);
-    });
-
-    newSocket.on('message-sent', (data: { success: boolean }) => {
-      console.log('✅ MESSAGE-SENT:', data);
-    });
-
-    newSocket.on('message-error', (data: { error: string }) => {
-      console.error('❌ MESSAGE-ERROR:', data);
-    });
-
-    newSocket.on('disconnect', (reason) => {
-      console.log('❌ Socket DISCONNECTED:', reason);
-      setSocketConnected(false);
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('❌ CONNECTION ERROR:', error);
-      setSocketConnected(false);
-    });
-
-    newSocket.on('reconnect_attempt', (attemptNumber) => {
-      console.log('🔄 Reconnection attempt:', attemptNumber);
-    });
-
-    newSocket.on('reconnect', (attemptNumber) => {
-      console.log('✅ Reconnected after', attemptNumber, 'attempts');
-      setSocketConnected(true);
-    });
+    newSocket.on('disconnect', () => setSocketConnected(false));
+    newSocket.on('connect_error', () => setSocketConnected(false));
+    newSocket.on('reconnect', () => setSocketConnected(true));
 
     setSocket(newSocket);
-
-    return () => {
-      console.log('🔌 Cleaning up socket');
-      newSocket.close();
-    };
+    return () => { newSocket.close(); };
   }, [user]);
 
-  // Socket event listeners
+  // Socket listeners (same as before)
   useEffect(() => {
     if (!socket) return;
 
-    console.log('📡 Setting up socket event listeners');
-
     socket.on('receive-message', (data: { senderId: string; content: string; timestamp: Date }) => {
-      console.log('📨 Received message via socket:', data);
-      
       if (selectedUser && (data.senderId === selectedUser.id || data.senderId === (selectedUser as any)._id)) {
         const newMessage: Message = {
           _id: Date.now().toString(),
@@ -177,7 +124,6 @@ const ChatWindow: React.FC = () => {
     });
 
     socket.on('user-status', (data: { userId: string; isOnline: boolean }) => {
-      console.log('👤 User status update:', data);
       setUsers(prev => prev.map(u => {
         const uId = u.id || (u as any)._id;
         return uId === data.userId ? { ...u, isOnline: data.isOnline } : u;
@@ -194,17 +140,14 @@ const ChatWindow: React.FC = () => {
 
   // Load users
   useEffect(() => {
-    if (user) {
-      loadUsers();
-    }
+    if (user) loadUsers();
   }, [user]);
 
-  // Load conversation when user is selected
+  // Load conversation
   useEffect(() => {
     if (selectedUser) {
       const recipientId = selectedUser.id || (selectedUser as any)._id;
       if (recipientId) {
-        console.log('📖 Loading conversation with user:', recipientId);
         loadConversation(recipientId);
         setUnreadCounts(prev => ({ ...prev, [recipientId]: 0 }));
       }
@@ -215,187 +158,184 @@ const ChatWindow: React.FC = () => {
 
   const loadUsers = async () => {
     try {
-      console.log('👥 Loading users...');
       const { data } = await messageAPI.getUsers();
-      console.log('✅ Loaded users:', data.users.length);
       setUsers(data.users);
     } catch (error: any) {
-      console.error('❌ Error loading users:', error);
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
         window.location.href = '/login';
       }
     }
   };
 
   const loadConversation = async (recipientId: string) => {
-    if (!recipientId || recipientId === 'undefined') {
-      console.error('❌ Invalid recipientId:', recipientId);
-      return;
-    }
-
+    if (!recipientId || recipientId === 'undefined') return;
     try {
-      console.log('📖 Fetching conversation with:', recipientId);
       const { data } = await messageAPI.getConversation(recipientId);
-      console.log('✅ Loaded messages:', data.messages.length);
       setMessages(data.messages);
     } catch (error: any) {
-      console.error('❌ Error loading conversation:', error);
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
         window.location.href = '/login';
       }
     }
   };
 
   const handleSendMessage = async (content: string) => {
-    if (!selectedUser) {
-      console.error('❌ No user selected');
-      alert('Please select a user to send message to');
-      return;
-    }
+    if (!selectedUser || !socket || !socket.connected || !content.trim()) return;
 
     const recipientId = selectedUser.id || (selectedUser as any)._id;
-
-    if (!recipientId) {
-      console.error('❌ No user ID found in:', selectedUser);
-      alert('Invalid user selected');
-      return;
-    }
-
-    if (!socket) {
-      console.error('❌ Socket not initialized');
-      alert('Connection not established. Please refresh the page.');
-      return;
-    }
-
-    // Check if socket is actually connected
-    if (!socket.connected) {
-      console.error('❌ Socket not connected. State:', socket.connected);
-      alert('Not connected to server. Attempting to reconnect...');
-      socket.connect();
-      return;
-    }
-
-    if (!content || !content.trim()) {
-      console.error('❌ Empty message');
-      return;
-    }
-
-    const messageData = {
-      recipientId: recipientId,
-      content: content.trim()
-    };
-
-    console.log('📤 Preparing to send message:', messageData);
+    const messageData = { recipientId, content: content.trim() };
 
     try {
-      console.log('💾 Calling API: POST /api/messages/send');
-      
       const response = await messageAPI.sendMessage(messageData);
-
-      console.log('✅ API Response received:', response.data);
-
       setMessages(prev => [...prev, response.data.message]);
-
-      console.log('📡 Emitting via socket to:', recipientId);
-      socket.emit('send-message', {
-        recipientId: recipientId,
-        content: content.trim()
-      });
-
-      console.log('✅ Message sent successfully');
+      socket.emit('send-message', messageData);
     } catch (error: any) {
-      console.error('❌ Error sending message:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      
       if (error.response?.status === 401) {
-        alert('Session expired. Please login again.');
         window.location.href = '/login';
-      } else if (error.response?.status === 400) {
-        alert(`Invalid request: ${error.response.data.error || 'Please check your input'}`);
-      } else {
-        alert(`Failed to send message: ${error.response?.data?.error || error.message}`);
       }
     }
   };
 
   const handleTyping = () => {
     const recipientId = selectedUser?.id || (selectedUser as any)?._id;
-    if (recipientId && socket && socket.connected) {
+    if (recipientId && socket?.connected) {
       socket.emit('typing', recipientId);
     }
   };
 
   const handleStopTyping = () => {
     const recipientId = selectedUser?.id || (selectedUser as any)?._id;
-    if (recipientId && socket && socket.connected) {
+    if (recipientId && socket?.connected) {
       socket.emit('stop-typing', recipientId);
     }
   };
 
+  const handleSelectUser = (user: User) => {
+    setSelectedUser(user);
+    setShowUserList(false); // Close sidebar on mobile after selection
+  };
+
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
+    <div className="h-screen flex flex-col bg-gray-50">
       <Navbar />
       
-      {/* Connection Status */}
-      {!socketConnected && user && (
-        <div className="bg-red-100 border-b border-red-400 px-4 py-2 text-center">
-          <span className="text-red-800 text-sm">
-            ⚠️ Disconnected from server. Trying to reconnect...
-          </span>
+      {/* Connection Status Banner */}
+      {!socketConnected && (
+        <div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 text-center text-sm flex items-center justify-center gap-2 shadow-md">
+          <WifiOff className="w-4 h-4" />
+          <span className="font-medium">Reconnecting to server...</span>
+        </div>
+      )}
+
+      {socketConnected && (
+        <div className="bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-1.5 text-center text-xs flex items-center justify-center gap-1.5">
+          <Wifi className="w-3.5 h-3.5" />
+          <span className="font-medium">Connected</span>
         </div>
       )}
       
       <div className="flex-1 flex overflow-hidden">
-        <UserList
-          users={users}
-          selectedUser={selectedUser}
-          onSelectUser={setSelectedUser}
-          unreadCounts={unreadCounts}
-        />
+        {/* Mobile Overlay */}
+        {showUserList && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+            onClick={() => setShowUserList(false)}
+          />
+        )}
 
-        <div className="flex-1 flex flex-col">
-          {selectedUser && (
-            <div className="bg-white border-b border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center space-x-3">
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
-                    {selectedUser.username.charAt(0).toUpperCase()}
+        {/* User List Sidebar */}
+        <div className={`
+          fixed lg:relative inset-y-0 left-0 z-50
+          w-80 lg:w-80 xl:w-96
+          bg-white border-r border-gray-200
+          transform transition-transform duration-300 ease-in-out
+          ${showUserList ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
+          <UserList
+            users={users}
+            selectedUser={selectedUser}
+            onSelectUser={handleSelectUser}
+            unreadCounts={unreadCounts}
+          />
+        </div>
+
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col min-w-0 bg-white">
+          {selectedUser ? (
+            <>
+              {/* Chat Header */}
+              <div className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {/* Mobile Menu Button */}
+                    <button
+                      onClick={() => setShowUserList(true)}
+                      className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <Menu className="w-5 h-5 text-gray-600" />
+                    </button>
+
+                    <div className="relative flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
+                        {selectedUser.username.charAt(0).toUpperCase()}
+                      </div>
+                      {selectedUser.isOnline && (
+                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">
+                        {selectedUser.username}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {selectedUser.isOnline ? (
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                            Online
+                          </span>
+                        ) : (
+                          'Offline'
+                        )}
+                      </p>
+                    </div>
                   </div>
-                  {selectedUser.isOnline && (
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
-                  )}
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-800">
-                    {selectedUser.username}
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    {selectedUser.isOnline ? 'Online' : 'Offline'}
-                  </p>
+              </div>
+
+              <MessageList
+                messages={messages}
+                currentUserId={user?.id || user?._id || ''}
+                selectedUser={selectedUser}
+                isTyping={isTyping}
+              />
+
+              <MessageInput
+                onSendMessage={handleSendMessage}
+                onTyping={handleTyping}
+                onStopTyping={handleStopTyping}
+                disabled={!socketConnected}
+              />
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center p-8">
+              <div className="text-center max-w-md">
+                <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                  <span className="text-5xl">💬</span>
                 </div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-3">Welcome to Chat</h2>
+                <p className="text-gray-600 mb-6">
+                  Select a conversation from the sidebar to start messaging
+                </p>
+                <button
+                  onClick={() => setShowUserList(true)}
+                  className="lg:hidden bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all font-medium shadow-lg"
+                >
+                  View Conversations
+                </button>
               </div>
             </div>
           )}
-
-          <MessageList
-            messages={messages}
-            currentUserId={user?.id || user?._id || ''}
-            selectedUser={selectedUser}
-            isTyping={isTyping}
-          />
-
-          <MessageInput
-            onSendMessage={handleSendMessage}
-            onTyping={handleTyping}
-            onStopTyping={handleStopTyping}
-            disabled={!selectedUser || !socketConnected}
-          />
         </div>
       </div>
     </div>

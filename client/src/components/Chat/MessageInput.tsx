@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Smile } from 'lucide-react';
 
 interface MessageInputProps {
   onSendMessage: (content: string) => void;
@@ -48,36 +48,22 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     const trimmedMessage = message.trim();
-    
-    console.log('📝 MessageInput submit:', {
-      original: message,
-      trimmed: trimmedMessage,
-      length: trimmedMessage.length
-    });
 
     if (trimmedMessage && !disabled) {
-      console.log('✅ Calling onSendMessage with:', trimmedMessage);
       onSendMessage(trimmedMessage);
       setMessage('');
       setIsTyping(false);
       onStopTyping();
-      
-      // Clear any pending typing timeout
+
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      
-      // Focus back on input
+
       if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
         inputRef.current.focus();
       }
-    } else {
-      console.warn('⚠️ Message not sent:', {
-        isEmpty: !trimmedMessage,
-        disabled: disabled
-      });
     }
   };
 
@@ -88,27 +74,44 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
+    }
+  }, [message]);
+
   return (
-    <form onSubmit={handleSubmit} className="bg-white border-t border-gray-200 p-4">
-      <div className="flex items-end space-x-2">
-        <textarea
-          ref={inputRef}
-          value={message}
-          onChange={handleChange}
-          onKeyPress={handleKeyPress}
-          placeholder={disabled ? 'Select a user to start chatting...' : 'Type a message...'}
-          disabled={disabled}
-          rows={1}
-          className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-          style={{ minHeight: '40px', maxHeight: '120px' }}
-        />
+    <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4">
+      <div className="flex items-end gap-3">
+        <div className="flex-1 relative">
+          <textarea
+            ref={inputRef}
+            value={message}
+            onChange={handleChange}
+            onKeyPress={handleKeyPress}
+            placeholder={disabled ? 'Disconnected...' : 'Type a message...'}
+            disabled={disabled}
+            rows={1}
+            className="w-full px-4 py-3 pr-12 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed text-sm md:text-base transition-all"
+            style={{ maxHeight: '120px' }}
+          />
+          <button
+            type="button"
+            className="absolute right-3 bottom-3 text-gray-400 hover:text-gray-600 transition-colors"
+            disabled={disabled}
+          >
+            <Smile className="w-5 h-5" />
+          </button>
+        </div>
+
         <button
           type="submit"
-          disabled={disabled || !message.trim()}
-          className="bg-blue-500 text-white rounded-lg px-4 py-2 hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center space-x-2"
+          disabled={!message.trim() || disabled}
+          className="flex-shrink-0 w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-2xl hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg flex items-center justify-center"
         >
-          <Send size={20} />
-          <span>Send</span>
+          <Send className="w-5 h-5" />
         </button>
       </div>
     </form>
