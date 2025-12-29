@@ -1,18 +1,51 @@
 import axios from 'axios';
 
-const serverURL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000';
+// Store token in localStorage
+export const setAuthToken = (token: string) => {
+  localStorage.setItem('authToken', token);
+};
+
+export const getAuthToken = () => {
+  return localStorage.getItem('authToken');
+};
+
+export const removeAuthToken = () => {
+  localStorage.removeItem('authToken');
+};
 
 const api = axios.create({
-  baseURL: serverURL + '/api',
+  baseURL: (import.meta as any).env.VITE_API_URL + '/api' || 'http://localhost:5000/api',
   withCredentials: true
 });
 
-// Debug interceptor
+// Add token to all requests
 api.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   console.log('🌐 API Request:', config.method?.toUpperCase(), config.url);
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => {
+    // Save token from login/register responses
+    if (response.data.token) {
+      setAuthToken(response.data.token);
+    }
+    console.log('✅ API Response:', response.status, response.config.url);
+    return response;
+  },
+  (error) => {
+    console.error('❌ API Error:', error.response?.status, error.config?.url, error.response?.data);
+    // if (error.response?.status === 401) {
+    //   removeAuthToken();
+    //   window.location.href = '/login';
+    // }
+    return Promise.reject(error);
+  }
+);
 api.interceptors.response.use(
   (response) => {
     console.log('✅ API Response:', response.status, response.config.url);
