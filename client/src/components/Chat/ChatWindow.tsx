@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { messageAPI, User, Message, getAuthToken } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { Menu, X, Wifi, WifiOff } from 'lucide-react';
+import { Menu, Wifi, WifiOff } from 'lucide-react';
 import UserList from './UserList';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';

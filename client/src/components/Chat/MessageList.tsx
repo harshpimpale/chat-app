@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Message, User } from '../../utils/api';
-import { Check, CheckCheck } from 'lucide-react';
+import { CheckCheck } from 'lucide-react';
 
 interface MessageListProps {
   messages: Message[];
