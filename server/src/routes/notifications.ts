@@ -63,5 +63,30 @@ router.post('/unsubscribe', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Add this route for testing
+router.post('/test-manual', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    
+    // Manually create a fake subscription for testing
+    const fakeSubscription = {
+      endpoint: 'https://test-endpoint.com',
+      keys: {
+        p256dh: 'test-key',
+        auth: 'test-auth'
+      }
+    };
+    
+    await User.findByIdAndUpdate(userId, {
+      pushSubscription: fakeSubscription
+    });
+    
+    res.json({ message: 'Fake subscription created for testing' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
 
 export default router;

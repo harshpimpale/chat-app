@@ -2,15 +2,17 @@ import webpush from 'web-push';
 import User from '../models/User.js';
 import dotenv from 'dotenv';
 
-// IMPORTANT: Load .env FIRST before any other imports
 dotenv.config();
 
-// Configure VAPID only if keys are available
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 const vapidEmail = process.env.VAPID_EMAIL || 'mailto:[email protected]';
-// console.log('🔑 VAPID Public Key:', vapidPublicKey);
-// console.log('🔑 VAPID Private Key:', vapidPrivateKey ? '****' : 'Not Set');
+
+console.log('🔑 Checking VAPID configuration...');
+console.log('  - Public key exists:', !!vapidPublicKey);
+console.log('  - Public key length:', vapidPublicKey?.length);
+console.log('  - Private key exists:', !!vapidPrivateKey);
+console.log('  - Email:', vapidEmail);
 
 if (vapidPublicKey && vapidPrivateKey) {
   webpush.setVapidDetails(
@@ -20,50 +22,76 @@ if (vapidPublicKey && vapidPrivateKey) {
   );
   console.log('✅ VAPID configured successfully');
 } else {
-  console.log(process.env.PORT, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY, process.env.MONGODB_URI);
-  console.warn('⚠️  VAPID keys not configured. Push notifications will not work.');
-  console.warn('Generate keys with: npx web-push generate-vapid-keys');
+  console.error('❌ VAPID keys not configured!');
+  console.error('Generate with: node -e "const webpush = require(\'web-push\'); const keys = webpush.generateVAPIDKeys(); console.log(\'VAPID_PUBLIC_KEY=\' + keys.publicKey); console.log(\'VAPID_PRIVATE_KEY=\' + keys.privateKey);"');
 }
 
 export async function sendPushNotification(userId: string, payload: {
   title: string;
   body: string;
   data?: any;
-}) {
+}): Promise<boolean> {
   if (!vapidPublicKey || !vapidPrivateKey) {
-    console.warn('Push notification skipped: VAPID keys not configured');
+    console.warn('⚠️ Push notification skipped: VAPID keys not configured');
     return false;
   }
 
   try {
+    console.log(`📢 Sending push to user: ${userId}`);
+    
     const user = await User.findById(userId);
     
-    if (!user || !user.pushSubscription) {
-      console.log(`User ${userId} has no push subscription`);
+    if (!user) {
+      console.log(`⚠️ User ${userId} not found`);
       return false;
     }
     
+    if (!user.pushSubscription) {
+      console.log(`⚠️ User ${userId} has no push subscription`);
+      return false;
+    }
+
+    // ✅ FIXED: Safely log endpoint
+    const endpoint = user.pushSubscription.endpoint || 'unknown';
+    console.log(`✅ User has subscription, endpoint: ${endpoint.substring(0, 50)}...`);
+
     const notificationPayload = JSON.stringify({
       title: payload.title,
       body: payload.body,
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-192x192.png',
+      icon: '/icon-192x192.png',
+      badge: '/badge-72x72.png',
+      tag: 'message-notification',
+      requireInteraction: true,
+      vibrate: [200, 100, 200],
       data: payload.data || {},
       timestamp: Date.now()
     });
-    
-    await webpush.sendNotification(user.pushSubscription, notificationPayload, {
-      TTL: 86400,
-      urgency: 'high'
+
+    console.log(`📤 Sending notification:`, {
+      title: payload.title,
+      body: payload.body.substring(0, 50)
     });
-    
-    console.log(`✅ Push notification sent to user ${userId}`);
+
+    await webpush.sendNotification(
+      user.pushSubscription, 
+      notificationPayload, 
+      {
+        TTL: 86400, // 24 hours
+        urgency: 'high'
+      }
+    );
+
+    console.log(`✅✅✅ Push notification sent successfully to user ${userId}`);
     return true;
-  } catch (error: any) {
-    console.error('Error sending push notification:', error);
     
-    // If subscription expired, remove it
+  } catch (error: any) {
+    console.error('❌ Error sending push notification:', error.message);
+    console.error('  - Status code:', error.statusCode);
+    console.error('  - Body:', error.body);
+    
+    // If subscription expired (410 Gone), remove it
     if (error.statusCode === 410) {
+      console.log(`🗑️ Removing expired subscription for user ${userId}`);
       await User.findByIdAndUpdate(userId, { $unset: { pushSubscription: 1 } });
     }
     

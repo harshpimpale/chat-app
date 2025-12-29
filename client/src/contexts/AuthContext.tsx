@@ -50,6 +50,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log('✅ User _ID:', normalizedUser._id);
       
       setUser(normalizedUser);
+      
+      // ✅ Subscribe to push notifications after authentication check
+      console.log('🔔 Setting up push notifications after auth check...');
+      try {
+        await subscribeToPushNotifications();
+        console.log('✅ Push notifications subscribed after auth check');
+      } catch (pushError) {
+        console.warn('⚠️ Push notification subscription failed (non-critical):', pushError);
+      }
+      
     } catch (error: any) {
       console.log('❌ Auth check failed:', error.response?.status);
       if (error.response?.status === 401) {
@@ -85,9 +95,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(normalizedUser);
       console.log('✅ User set in state:', normalizedUser);
       
+      // ✅ Subscribe to push notifications after login
+      console.log('🔔 Setting up push notifications after login...');
       try {
         await subscribeToPushNotifications();
-        console.log('✅ Push notifications subscribed');
+        console.log('✅ Push notifications subscribed after login');
       } catch (pushError) {
         console.warn('⚠️ Push notification subscription failed (non-critical):', pushError);
       }
@@ -119,9 +131,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       setUser(normalizedUser);
       
-      // Subscribe to push notifications after registration
+      // ✅ Subscribe to push notifications after registration
+      console.log('🔔 Setting up push notifications after registration...');
       try {
         await subscribeToPushNotifications();
+        console.log('✅ Push notifications subscribed after registration');
       } catch (pushError) {
         console.warn('⚠️ Push notification subscription failed (non-critical):', pushError);
       }

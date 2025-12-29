@@ -21,38 +21,30 @@ self.addEventListener('push', (event) => {
     body: 'You have a new message',
     icon: '/icon-192x192.png',
     badge: '/badge-72x72.png',
-    data: { url: '/' },
-    tag: 'message-notification',
-    requireInteraction: true,
-    vibrate: [200, 100, 200]
+    data: { url: '/' }
   };
 
   if (event.data) {
     try {
       const payload = event.data.json();
       console.log('📦 Payload:', payload);
-      
       notificationData = {
         title: payload.title || notificationData.title,
         body: payload.body || notificationData.body,
         icon: payload.icon || notificationData.icon,
         badge: payload.badge || notificationData.badge,
         data: payload.data || notificationData.data,
-        tag: payload.tag || 'message-notification',
-        requireInteraction: payload.requireInteraction !== undefined ? payload.requireInteraction : true,
-        vibrate: payload.vibrate || [200, 100, 200]
+        tag: 'message-notification',
+        requireInteraction: true,
+        vibrate: [200, 100, 200]
       };
     } catch (error) {
       console.error('❌ Error parsing payload:', error);
     }
   }
 
-  console.log('🔔 Showing notification:', notificationData);
-
-  // ✅ THIS IS CRITICAL - MUST SHOW NOTIFICATION
-  const promiseChain = self.registration.showNotification(
-    notificationData.title,
-    {
+  event.waitUntil(
+    self.registration.showNotification(notificationData.title, {
       body: notificationData.body,
       icon: notificationData.icon,
       badge: notificationData.badge,
@@ -60,10 +52,8 @@ self.addEventListener('push', (event) => {
       tag: notificationData.tag,
       requireInteraction: notificationData.requireInteraction,
       vibrate: notificationData.vibrate
-    }
+    })
   );
-
-  event.waitUntil(promiseChain);
 });
 
 self.addEventListener('notificationclick', (event) => {
